@@ -1,0 +1,173 @@
+---
+title: "Course Project - Practical Machine Learning"
+author: "Sanket Bambodkar"
+date: "5 June 2019"
+output:
+  html_document: default
+  word_document: default
+---
+
+Overview
+--------
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways.
+
+The goal of your project is to predict the manner in which they did the exercise. This is the "classe" variable in the training set.   
+
+Required Libraries
+------------------
+```{r warning=FALSE, error=FALSE}
+library(caret)
+library(rpart)
+library(randomForest)
+library(gbm)
+library(rattle)
+```
+
+Loading and Cleaning the data
+-----------------------------
+```{r warning=FALSE, error=FALSE}
+train <- read.csv(url("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"),header=TRUE)
+test <- read.csv(url("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"),header=TRUE)
+```
+
+Let's look at the summary of train and test data.
+```{r warning=FALSE, error=FALSE}
+dim(train)
+dim(test)
+```
+Data has observations on 160 different variables
+```{r warning=FALSE, error=FALSE}
+str(train)
+```
+Many columns in the data have majority of the values as 'NA' or they are blank. We will remove these columns from our model design. Also first seven columns of the data willl not affect our model so we will be removing them.   
+```{r warning=FALSE, error=FALSE}
+blank <- which(colSums(is.na(train)|train == "")>0.9*dim(train)[1])
+train <- train[, - blank]
+train <- train[, - (1:7)]
+dim(train)
+```
+Now doing the same treatment for test data set
+```{r warning=FALSE, error=FALSE}
+test <- test[, - blank]
+test <- test[, - (1:7)]
+dim(test)
+```
+Now the data has 53 variables, last variable 'classe' is the outcome for us and other variables will be our predictors.  
+
+Data partition and Cross Validation
+-----------------------------------
+Now parting the train data in train1 and test1 data set
+```{r warning=FALSE, error=FALSE}
+set.seed(12)
+select <- createDataPartition(train$classe, p=0.75, list=FALSE)
+train1 <- train[select,]
+test1 <- train[-select,]
+```
+Let's look at the dimensions of newly formed train1 and test1 datasets.
+```{r warning=FALSE, error=FALSE}
+dim(train1)
+dim(test1)
+```
+Now, let's set cross validation technique. we will be using 5 fold cross validation. 5 fold cross validation is chosen to avoid overfitting of the model.    
+Using caret package for this.  
+
+```{r warning=FALSE, error=FALSE}
+crossVal <- trainControl(method = "cv", number = 5)
+```
+
+Model Design
+------------
+We will build 4 models using Classification Trees (rpart), Random Forest (rf), Gradient Boosting (gbm) and Latent Dirichlet Allocation (lda)    
+
+Classification Tree Model:
+```{r warning=FALSE, error=FALSE}
+model_rpart <- train(classe~., data=train1, method="rpart", trControl=crossVal)
+fancyRpartPlot(model_rpart$finalModel)
+```
+
+Random Forest Model:
+```{r warning=FALSE, error=FALSE}
+model_rf <- train(classe~., data=train1, method="rf", trControl=crossVal)
+```
+
+Gradient Boosting Model:
+```{r warning=FALSE, error=FALSE}
+model_gbm <- train(classe~., data=train1, method="gbm", trControl=crossVal)
+```
+
+Latent Dirichlet Allocation Model:
+```{r warning=FALSE, error=FALSE}
+model_lda <- train(classe~., data=train1, method="lda", trControl=crossVal)
+```
+
+
+Model Selection
+---------------
+We will use above models to predict 'classe' outcome on the test1 dataset. Based on the prediction made, we will select the model with most accurate results.   
+If accuracy is not upto mark then we will combine our existing model to make newer models with better accuray.   
+
+Classification Tree Model:
+```{r warning=FALSE, error=FALSE}
+pred_rpart <- predict(model_rpart, newdata = test1)
+confusionMatrix(test1$classe, pred_rpart)$overall['Accuracy']
+```
+Here we get the accuracy of 49.16 % which is not satisfactory.   
+
+Random Forest Model:
+```{r warning=FALSE, error=FALSE}
+pred_rf <- predict(model_rf, newdata = test1)
+confusionMatrix(test1$classe, pred_rf)$overall['Accuracy']
+```
+Here we get the accuracy of 99.61 % which is very good.   
+
+Gradient Boosting Model:
+```{r warning=FALSE, error=FALSE}
+pred_gbm <- predict(model_gbm, newdata = test1)
+confusionMatrix(test1$classe, pred_gbm)$overall['Accuracy']
+```
+Here we get the accuray of 96.29 % which is good but random forest has done better.    
+
+Latent Dirichlet Allocation Model:
+```{r warning=FALSE, error=FALSE}
+pred_lda <- predict(model_lda, newdata = test1)
+confusionMatrix(test1$classe, pred_lda)$overall['Accuracy']
+```
+Here we get the accuracy of 69.92 % which is not satisfactory.  
+
+Final Model
+-----------
+We will be selecting random forest model (**model_rf**) as our final model.    
+
+Let's look at the predictor variables in our final model:
+```{r warning=FALSE, error=FALSE}
+names(model_rf$finalModel)
+```
+There are 23 predictors in our final model.
+
+Let's look at the importance order of these predictors:
+```{r warning=FALSE, error=FALSE}
+varImp(model_rf$finalModel)
+```
+Here we can see that **roll_belt**, **yaw_belt** and **pitch_belt** are the most important predictors.
+
+Let's look at the error plot in our final model.
+```{r warning=FALSE, error=FALSE}
+plot(model_rf$finalModel)
+```
+
+Predicting Test Outcome
+-----------------------
+Now we will use our final model to predict outcome for our test data set.
+```{r warning=FALSE, error=FALSE}
+final_prediction <- predict(model_rf, newdata = test)
+final_prediction
+```
+
+Conclusion
+----------
+Random Forest is the best model for our prediction.   
+Accuracy of the model is 99.61 % and out of sample error is 0.39 %.  
+Using our model to predict the classe variable for the test data set gives the following outcome:    
+```{r warning=FALSE, error=FALSE}
+final_prediction
+```
